@@ -31,4 +31,4 @@ SCENES = int(os.getenv("VIDEO_SCENES", "8"))
 PRIVACY = os.getenv("VIDEO_PRIVACY", "private")
 CATEGORY = os.getenv("YOUTUBE_CATEGORY_ID", "24")
 
-client = OpenAI(api
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
