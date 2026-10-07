@@ -3,36 +3,42 @@ name: Auto Video Bot Workflow
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 12 * * *'
+    - cron: '0 12 * * *' # Runs daily at 12:00 UTC
 
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: Run Motivation Video Bot
-      env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-      run: |
-        python app.py --niche motivation --channel "Motivation Central"
+      - name: Run Motivation Video Bot
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_CREDENTIALS: ${{ secrets.YOUTUBE_CREDENTIALS }}
+          VIDEO_TOPIC: "Daily Motivation and Success Tips"
+          VIDEO_LANGUAGE: "English"
+        run: |
+          python app.py
 
-    - name: Run Tech News Bot
-      env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-      run: |
-        python app.py --niche tech --channel "Tech Today"
+      - name: Run Tech News Bot
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_CREDENTIALS: ${{ secrets.YOUTUBE_CREDENTIALS }}
+          VIDEO_TOPIC: "Latest AI and Technology Trends"
+          VIDEO_LANGUAGE: "English"
+        run: |
+          python app.py
