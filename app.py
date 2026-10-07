@@ -19,7 +19,10 @@ OUT.mkdir(exist_ok=True)
 
 TOPIC = os.getenv("VIDEO_TOPIC", "Daily Motivation and Success Tips")
 LANGUAGE = os.getenv("VIDEO_LANGUAGE", "English")
-SCENES = int(os.getenv("VIDEO_SCENES", "3"))
+
+# Safe int conversion for SCENES
+raw_scenes = os.getenv("VIDEO_SCENES", "").strip()
+SCENES = int(raw_scenes) if raw_scenes.isdigit() else 3
 
 PRIVACY = os.getenv("VIDEO_PRIVACY", "private")
 CATEGORY = os.getenv("YOUTUBE_CATEGORY_ID", "24")
@@ -60,7 +63,6 @@ def generate_script(topic, language, scenes_count):
 # 2. FREE AUDIO GENERATION (Edge TTS)
 # ==========================================
 async def generate_audio_async(text, output_file):
-    # En-US Neural Voice (Natural Voice)
     voice = "en-US-ChristopherNeural"
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_file)
