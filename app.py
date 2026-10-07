@@ -1,14 +1,12 @@
 import os
-import re
 import json
-import base64
-import subprocess
+import asyncio
 import requests
 from pathlib import Path
+import subprocess
 
-from openai import OpenAI
-from PIL import Image, ImageDraw, ImageFont
-
+import edge_tts
+from google import genai
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -19,10 +17,6 @@ from googleapiclient.http import MediaFileUpload
 OUT = Path("output")
 OUT.mkdir(exist_ok=True)
 
-TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-4o-mini")
-IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "dall-e-3")
-TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "tts-1")
-
 TOPIC = os.getenv("VIDEO_TOPIC", "Daily Motivation and Success Tips")
 LANGUAGE = os.getenv("VIDEO_LANGUAGE", "English")
 SCENES = int(os.getenv("VIDEO_SCENES", "3"))
@@ -30,62 +24,62 @@ SCENES = int(os.getenv("VIDEO_SCENES", "3"))
 PRIVACY = os.getenv("VIDEO_PRIVACY", "private")
 CATEGORY = os.getenv("YOUTUBE_CATEGORY_ID", "24")
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Google Gemini Client (Free Tier)
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+gemini_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
 # ==========================================
-# 1. GENERATE SCRIPT & PROMPTS
+# 1. FREE SCRIPT GENERATION (Gemini Free API)
 # ==========================================
 def generate_script(topic, language, scenes_count):
+    if not gemini_client:
+        print("GEMINI_API_KEY missing, using fallback template.")
+        return {
+            "title": f"Motivation: {topic}",
+            "description": f"Inspiring video about {topic}",
+            "scenes": [
+                {"narration": "Believe in yourself and take action today.", "image_prompt": "cinematic dramatic motivational scene highly detailed"},
+                {"narration": "Success requires consistency and continuous hard work.", "image_prompt": "person standing on top of mountain sunset success"},
+                {"narration": "Never give up on your dreams.", "image_prompt": "bright golden future glowing path success"}
+            ]
+        }
+
     prompt = f"""
     Create a short video script about '{topic}' in {language}.
     Break it down into exactly {scenes_count} short visual scenes.
-    For each scene, provide:
-    1. 'narration': The spoken voiceover text.
-    2. 'image_prompt': A clear prompt to generate a background image for this scene.
-    3. 'title': A catchy video title.
-    4. 'description': Video description.
-
-    Return ONLY a valid JSON object matching this structure:
-    {{
-      "title": "...",
-      "description": "...",
-      "scenes": [
-        {{"narration": "...", "image_prompt": "..."}}
-      ]
-    }}
+    Return ONLY a valid JSON object with keys: 'title', 'description', and 'scenes' (a list of dicts with 'narration' and 'image_prompt').
     """
-    response = client.chat.completions.create(
-        model=TEXT_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"}
+    response = gemini_client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt,
     )
-    return json.loads(response.choices[0].message.content)
+    raw_text = response.text.strip().replace("```json", "").replace("```", "")
+    return json.loads(raw_text)
 
 # ==========================================
-# 2. GENERATE AUDIO (TTS)
+# 2. FREE AUDIO GENERATION (Edge TTS)
 # ==========================================
+async def generate_audio_async(text, output_file):
+    # En-US Neural Voice (Natural Voice)
+    voice = "en-US-ChristopherNeural"
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save(output_file)
+
 def generate_audio(text, output_file):
-    response = client.audio.speech.create(
-        model=TTS_MODEL,
-        voice="alloy",
-        input=text
-    )
-    response.stream_to_file(output_file)
+    asyncio.run(generate_audio_async(text, output_file))
 
 # ==========================================
-# 3. GENERATE IMAGE
+# 3. FREE IMAGE GENERATION (Pollinations.ai)
 # ==========================================
 def generate_image(prompt, output_file):
-    response = client.images.generate(
-        model=IMAGE_MODEL,
-        prompt=prompt,
-        n=1,
-        size="1024x1024"
-    )
-    img_url = response.data[0].url
-    img_data = requests.get(img_url).content
-    with open(output_file, 'wb') as handler:
-        handler.write(img_data)
+    formatted_prompt = requests.utils.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{formatted_prompt}?width=1080&height=1920&nologo=true"
+    response = requests.get(url, timeout=30)
+    if response.status_code == 200:
+        with open(output_file, "wb") as f:
+            f.write(response.content)
+    else:
+        raise Exception(f"Failed to generate image: Status {response.status_code}")
 
 # ==========================================
 # 4. BUILD VIDEO (FFMPEG)
@@ -155,7 +149,7 @@ def upload_to_youtube(video_path, title, description):
 # MAIN EXECUTION
 # ==========================================
 def main():
-    print("--- Starting AI Video Generator ---")
+    print("--- Starting FREE AI Video Generator ---")
     
     print("Generating script...")
     data = generate_script(TOPIC, LANGUAGE, SCENES)
@@ -166,13 +160,13 @@ def main():
         print(f"\nProcessing Scene {idx+1}/{len(data['scenes'])}...")
         
         audio_file = OUT / f"scene_{idx+1}.mp3"
-        image_file = OUT / f"scene_{idx+1}.png"
+        image_file = OUT / f"scene_{idx+1}.jpg"
         video_file = OUT / f"scene_{idx+1}.mp4"
 
-        print("- Generating speech...")
+        print("- Generating speech (Edge TTS Free)...")
         generate_audio(scene['narration'], audio_file)
 
-        print("- Generating image...")
+        print("- Generating image (Pollinations AI Free)...")
         generate_image(scene['image_prompt'], image_file)
 
         print("- Rendering scene video...")
