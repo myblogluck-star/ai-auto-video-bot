@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import asyncio
 import requests
 from pathlib import Path
@@ -71,17 +72,30 @@ def generate_audio(text, output_file):
     asyncio.run(generate_audio_async(text, output_file))
 
 # ==========================================
-# 3. FREE IMAGE GENERATION (Pollinations.ai)
+# 3. FREE IMAGE GENERATION (With Retries & Fallback)
 # ==========================================
 def generate_image(prompt, output_file):
     formatted_prompt = requests.utils.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{formatted_prompt}?width=1080&height=1920&nologo=true"
-    response = requests.get(url, timeout=30)
-    if response.status_code == 200:
-        with open(output_file, "wb") as f:
-            f.write(response.content)
-    else:
-        raise Exception(f"Failed to generate image: Status {response.status_code}")
+    primary_url = f"https://image.pollinations.ai/prompt/{formatted_prompt}?width=1080&height=1920&nologo=true"
+    fallback_url = f"https://picsum.photos/1080/1920"
+
+    # Retry primary provider up to 3 times
+    for attempt in range(1, 4):
+        try:
+            response = requests.get(primary_url, timeout=30)
+            if response.status_code == 200 and len(response.content) > 1000:
+                with open(output_file, "wb") as f:
+                    f.write(response.content)
+                return
+        except Exception as e:
+            print(f"Image attempt {attempt} failed: {e}")
+        time.sleep(3)
+
+    # Use fallback image provider if main API fails
+    print("Main image service failed, using fallback high-res image...")
+    res = requests.get(fallback_url, timeout=30)
+    with open(output_file, "wb") as f:
+        f.write(res.content)
 
 # ==========================================
 # 4. BUILD VIDEO (FFMPEG)
@@ -183,6 +197,6 @@ def main():
     print("\nUploading to YouTube...")
     upload_to_youtube(final_video, data['title'], data['description'])
     print("--- Workflow Completed Successfully ---")
- 
+
 if __name__ == "__main__":
     main()
