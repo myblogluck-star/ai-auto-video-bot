@@ -3,6 +3,7 @@ import re
 import json
 import base64
 import subprocess
+import requests
 from pathlib import Path
 
 from openai import OpenAI
@@ -81,7 +82,6 @@ def generate_image(prompt, output_file):
         n=1,
         size="1024x1024"
     )
-    import requests
     img_url = response.data[0].url
     img_data = requests.get(img_url).content
     with open(output_file, 'wb') as handler:
@@ -155,4 +155,38 @@ def upload_to_youtube(video_path, title, description):
 # MAIN EXECUTION
 # ==========================================
 def main():
-    print("
+    print("--- Starting AI Video Generator ---")
+    
+    print("Generating script...")
+    data = generate_script(TOPIC, LANGUAGE, SCENES)
+    print(f"Title: {data['title']}")
+
+    scene_videos = []
+    for idx, scene in enumerate(data['scenes']):
+        print(f"\nProcessing Scene {idx+1}/{len(data['scenes'])}...")
+        
+        audio_file = OUT / f"scene_{idx+1}.mp3"
+        image_file = OUT / f"scene_{idx+1}.png"
+        video_file = OUT / f"scene_{idx+1}.mp4"
+
+        print("- Generating speech...")
+        generate_audio(scene['narration'], audio_file)
+
+        print("- Generating image...")
+        generate_image(scene['image_prompt'], image_file)
+
+        print("- Rendering scene video...")
+        build_scene_video(image_file, audio_file, video_file)
+        scene_videos.append(video_file)
+
+    final_video = OUT / "final_video.mp4"
+    print("\nMerging all scene videos into final output...")
+    concatenate_videos(scene_videos, final_video)
+    print(f"Final Video Ready at: {final_video}")
+
+    print("\nUploading to YouTube...")
+    upload_to_youtube(final_video, data['title'], data['description'])
+    print("--- Workflow Completed Successfully ---")
+
+if __name__ == "__main__":
+    main()
